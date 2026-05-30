@@ -16,11 +16,13 @@ import invoicesRouter from './routes/invoices';
 import schemesRouter from './routes/schemes';
 import advancesRouter from './routes/advances';
 import girviRouter from './routes/girvi';
+import ordersRouter from './routes/orders';
 
 const app = express();
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(corsMiddleware);
 
 // Request Logging Middleware
@@ -53,6 +55,7 @@ app.use('/api/invoices', invoicesRouter);
 app.use('/api/schemes', schemesRouter);
 app.use('/api/advances', advancesRouter);
 app.use('/api/girvi', girviRouter);
+app.use('/api/orders', ordersRouter);
 
 // Error handling
 app.use(errorHandler);

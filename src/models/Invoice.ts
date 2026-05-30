@@ -12,6 +12,13 @@ interface IInvoiceItem {
   qty: number;
 }
 
+interface IInvoicePayment {
+  date: Date;
+  amount: number;
+  mode: string;
+  note?: string;
+}
+
 interface IInvoice {
   number: string;
   type: 'GST' | 'NON-GST';
@@ -25,6 +32,9 @@ interface IInvoice {
   subtotal: number;
   gstAmount: number;
   total: number;
+  amountPaid?: number;
+  balanceDue?: number;
+  payments: IInvoicePayment[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,6 +51,13 @@ const invoiceItemSchema = new Schema<IInvoiceItem>({
   qty: { type: Number, required: true },
 });
 
+const invoicePaymentSchema = new Schema<IInvoicePayment>({
+  date: { type: Date, required: true, default: Date.now },
+  amount: { type: Number, required: true },
+  mode: { type: String, required: true },
+  note: { type: String },
+});
+
 const invoiceSchema = new Schema<IInvoice>(
   {
     number: { type: String, required: true, unique: true },
@@ -55,6 +72,9 @@ const invoiceSchema = new Schema<IInvoice>(
     subtotal: { type: Number, required: true },
     gstAmount: { type: Number, required: true },
     total: { type: Number, required: true },
+    amountPaid: { type: Number },
+    balanceDue: { type: Number },
+    payments: { type: [invoicePaymentSchema], default: [] },
     createdAt: { type: Date, required: true, default: Date.now },
   },
   { timestamps: true }

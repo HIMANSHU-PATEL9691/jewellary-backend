@@ -16,6 +16,7 @@ interface IInventory {
   ratePerGram: number;
   stock: number;
   barcode?: string;
+  imageUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +38,7 @@ const inventorySchema = new Schema<IInventory>(
     ratePerGram: { type: Number, required: true, default: 7200 },
     stock: { type: Number, required: true, default: 1 },
     barcode: { type: String },
+    imageUrl: { type: String },
   },
   { timestamps: true }
 );

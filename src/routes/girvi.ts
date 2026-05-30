@@ -3,17 +3,25 @@ import { Girvi } from '../models/Girvi';
 
 const router = Router();
 
-// Get all girvi records
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const records = await Girvi.find().sort({ createdAt: -1 });
-    res.json(records);
+    const data = await Girvi.find().sort({ createdAt: -1 });
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch girvi records' });
   }
 });
 
-// Create new girvi record
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const record = await Girvi.findById(req.params.id);
+    if (!record) return res.status(404).json({ error: 'Record not found' });
+    res.json(record);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch record' });
+  }
+});
+
 router.post('/', async (req: Request, res: Response) => {
   try {
     const record = new Girvi(req.body);
@@ -24,7 +32,6 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// Update girvi record
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const record = await Girvi.findByIdAndUpdate(req.params.id, req.body, {
@@ -38,7 +45,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Delete girvi record
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const record = await Girvi.findByIdAndDelete(req.params.id);
