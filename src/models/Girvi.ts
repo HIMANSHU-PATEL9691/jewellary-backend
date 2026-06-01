@@ -29,6 +29,8 @@ export interface IGirvi extends Document {
   forwardedAmount?: number;
   forwardedInterestPct?: number;
   forwardedImageUrl?: string;
+  customerSignature?: string;
+  authorizedSignatory?: string;
   note?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -64,6 +66,8 @@ const girviSchema = new Schema<IGirvi>(
     forwardedAmount: { type: Number },
     forwardedInterestPct: { type: Number },
     forwardedImageUrl: { type: String },
+    customerSignature: { type: String },
+    authorizedSignatory: { type: String },
     note: { type: String },
   },
   { timestamps: true }

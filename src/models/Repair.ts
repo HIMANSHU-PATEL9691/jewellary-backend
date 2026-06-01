@@ -19,6 +19,8 @@ interface IRepair {
   karigarId?: string;
   status: 'Received' | 'In Progress' | 'Ready' | 'Delivered';
   note?: string;
+  customerSignature?: string;
+  authorizedSignatory?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +45,8 @@ const repairSchema = new Schema<IRepair>(
     karigarId: { type: String },
     status: { type: String, enum: ['Received', 'In Progress', 'Ready', 'Delivered'], default: 'Received' },
     note: { type: String },
+    customerSignature: { type: String },
+    authorizedSignatory: { type: String },
   },
   { timestamps: true }
 );

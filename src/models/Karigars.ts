@@ -4,12 +4,13 @@ interface IKarigar {
   name: string;
   mobile: string;
   mobile2?: string;
-  companyName: string;
+  companyName?: string;
   email?: string;
-  category: string;
+  category?: string;
+  specialty?: string;
   gstNumber?: string;
-  address: string;
-  note: string;
+  address?: string;
+  note?: string;
   pendingWeight: number;
   createdAt: Date;
   updatedAt: Date;
@@ -20,12 +21,13 @@ const karigarSchema = new Schema<IKarigar>(
     name: { type: String, required: true },
     mobile: { type: String, required: true },
     mobile2: { type: String },
-    companyName: { type: String, required: true },
+    companyName: { type: String },
     email: { type: String },
-    category: { type: String, required: true },
+    category: { type: String },
+    specialty: { type: String },
     gstNumber: { type: String },
-    address: { type: String, required: true },
-    note: { type: String, required: true },
+    address: { type: String },
+    note: { type: String },
     pendingWeight: { type: Number, default: 0 },
   },
   { timestamps: true }

@@ -14,6 +14,8 @@ export interface IOrder extends Document {
   dueDate?: string;
   status: string;
   note?: string;
+  customerSignature?: string;
+  authorizedSignatory?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +35,8 @@ const orderSchema = new Schema<IOrder>(
     dueDate: { type: String },
     status: { type: String, default: 'Pending' },
     note: { type: String },
+    customerSignature: { type: String },
+    authorizedSignatory: { type: String },
   },
   { timestamps: true }
 );

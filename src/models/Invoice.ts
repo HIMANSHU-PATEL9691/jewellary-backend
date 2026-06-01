@@ -35,6 +35,8 @@ interface IInvoice {
   amountPaid?: number;
   balanceDue?: number;
   payments: IInvoicePayment[];
+  customerSignature?: string;
+  authorizedSignatory?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -75,6 +77,8 @@ const invoiceSchema = new Schema<IInvoice>(
     amountPaid: { type: Number },
     balanceDue: { type: Number },
     payments: { type: [invoicePaymentSchema], default: [] },
+    customerSignature: { type: String },
+    authorizedSignatory: { type: String },
     createdAt: { type: Date, required: true, default: Date.now },
   },
   { timestamps: true }
