@@ -17,6 +17,7 @@ import schemesRouter from './routes/schemes';
 import advancesRouter from './routes/advances';
 import girviRouter from './routes/girvi';
 import ordersRouter from './routes/orders';
+import employeesRouter from './routes/employees';
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use('/api/schemes', schemesRouter);
 app.use('/api/advances', advancesRouter);
 app.use('/api/girvi', girviRouter);
 app.use('/api/orders', ordersRouter);
+app.use('/api/employees', employeesRouter);
 
 // Error handling
 app.use(errorHandler);
