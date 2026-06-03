@@ -6,6 +6,7 @@ interface IRepair {
   customerName: string;
   customerMobile?: string;
   customerMobile2?: string;
+  customerAddress?: string;
   category?: string;
   design?: string;
   repairType?: string;
@@ -32,6 +33,7 @@ const repairSchema = new Schema<IRepair>(
     customerName: { type: String, required: true },
     customerMobile: { type: String },
     customerMobile2: { type: String },
+    customerAddress: { type: String },
     category: { type: String },
     design: { type: String },
     repairType: { type: String },

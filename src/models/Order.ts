@@ -5,6 +5,7 @@ export interface IOrder extends Document {
   date: string;
   customerName: string;
   customerMobile?: string;
+  customerAddress?: string;
   itemDescription: string;
   metal: string;
   purity?: string;
@@ -26,6 +27,7 @@ const orderSchema = new Schema<IOrder>(
     date: { type: String, required: true },
     customerName: { type: String, required: true },
     customerMobile: { type: String },
+    customerAddress: { type: String },
     itemDescription: { type: String, required: true },
     metal: { type: String, required: true, default: 'Gold' },
     purity: { type: String },
