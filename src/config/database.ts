@@ -16,7 +16,18 @@ const connectDB = async () => {
 
     const conn = await mongoose.connect(uri, {
       maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      family: 4, // Force IPv4 (fixes 'localhost' resolution issues in Node 18+)
     });
+
+    mongoose.connection.on('disconnected', () => {
+      console.warn('MongoDB disconnected. Attempting to reconnect...');
+    });
+
+    mongoose.connection.on('error', (err) => {
+      console.error('MongoDB connection error:', err);
+    });
+
     console.log('MongoDB connected:', conn.connection.host);
     return conn;
   } catch (error) {
