@@ -7,7 +7,7 @@ interface ICustomer {
   address: string;
   gstNumber?: string;
   pan?: string;
-  notes: string;
+  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,7 +20,7 @@ const customerSchema = new Schema<ICustomer>(
     address: { type: String, required: true },
     gstNumber: { type: String },
     pan: { type: String },
-    notes: { type: String, required: true },
+    notes: { type: String },
   },
   { timestamps: true }
 );

@@ -1,7 +1,7 @@
 {
-  "name": "cloudiefy-software-backend",
+  "name": "Arihent -software-backend",
   "version": "1.0.0",
-  "description": "Express backend for CLOUDIEFY SOFTWARE",
+  "description": "Express backend for Arihent  SOFTWARE",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
