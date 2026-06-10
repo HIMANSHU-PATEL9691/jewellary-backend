@@ -1,7 +1,7 @@
 {
-  "name": "Arihent -software-backend",
+  "name": "Arihant -software-backend",
   "version": "1.0.0",
-  "description": "Express backend for Arihent  SOFTWARE",
+  "description": "Express backend for Arihant  SOFTWARE",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
