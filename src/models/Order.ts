@@ -9,8 +9,7 @@ export interface IOrder extends Document {
   itemDescription: string;
   metal: string;
   purity?: string;
-  estimatedWeight?: number;
-  estimatedPrice?: number;
+  fixedPrice?: number;
   advancePaid?: number;
   dueDate?: string;
   status: string;
@@ -31,8 +30,7 @@ const orderSchema = new Schema<IOrder>(
     itemDescription: { type: String, required: true },
     metal: { type: String, required: true, default: 'Gold' },
     purity: { type: String },
-    estimatedWeight: { type: Number, default: 0 },
-    estimatedPrice: { type: Number, default: 0 },
+    fixedPrice: { type: Number, default: 0 },
     advancePaid: { type: Number, default: 0 },
     dueDate: { type: String },
     status: { type: String, default: 'Pending' },

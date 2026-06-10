@@ -1,7 +1,7 @@
 import { Schema, model } from 'mongoose';
 
 interface ICustomer {
-  name: string;
+  name: string; 
   phone: string;
   phone2?: string;
   address: string;
@@ -15,7 +15,7 @@ interface ICustomer {
 const customerSchema = new Schema<ICustomer>(
   {
     name: { type: String, required: true },
-    phone: { type: String, required: true, unique: true },
+    phone: { type: String, required: true },
     phone2: { type: String },
     address: { type: String, required: true },
     gstNumber: { type: String },

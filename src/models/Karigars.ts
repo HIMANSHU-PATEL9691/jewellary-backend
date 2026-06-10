@@ -3,7 +3,6 @@ import { Schema, model } from 'mongoose';
 interface IKarigar {
   name: string;
   mobile: string;
-  mobile2?: string;
   companyName?: string;
   email?: string;
   category?: string;
@@ -20,7 +19,6 @@ const karigarSchema = new Schema<IKarigar>(
   {
     name: { type: String, required: true },
     mobile: { type: String, required: true },
-    mobile2: { type: String },
     companyName: { type: String },
     email: { type: String },
     category: { type: String },

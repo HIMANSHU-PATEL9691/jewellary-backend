@@ -10,10 +10,8 @@ interface IInventory {
   grossWeight: number;
   netWeight: number;
   stoneWeight: number;
-  wastagePct: number;
   makingCharge: number;
   gstPct: number;
-  ratePerGram: number;
   stock: number;
   barcode?: string;
   imageUrl?: string;
@@ -32,10 +30,8 @@ const inventorySchema = new Schema<IInventory>(
     grossWeight: { type: Number, required: true, default: 0 },
     netWeight: { type: Number, required: true, default: 0 },
     stoneWeight: { type: Number, required: true, default: 0 },
-    wastagePct: { type: Number, required: true, default: 8 },
     makingCharge: { type: Number, required: true, default: 500 },
     gstPct: { type: Number, required: true, default: 3 },
-    ratePerGram: { type: Number, required: true, default: 7200 },
     stock: { type: Number, required: true, default: 1 },
     barcode: { type: String },
     imageUrl: { type: String },

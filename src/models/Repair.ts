@@ -13,7 +13,6 @@ interface IRepair {
   itemDescription?: string;
   itemWeight?: number;
   problem?: string;
-  estimate?: number;
   advance?: number;
   expectedDate?: Date;
   deliveryDate?: Date;
@@ -40,7 +39,6 @@ const repairSchema = new Schema<IRepair>(
     itemDescription: { type: String },
     itemWeight: { type: Number },
     problem: { type: String },
-    estimate: { type: Number, default: 0 },
     advance: { type: Number, default: 0 },
     expectedDate: { type: Date },
     deliveryDate: { type: Date },
