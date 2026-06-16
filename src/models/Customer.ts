@@ -1,8 +1,9 @@
 import { Schema, model } from 'mongoose';
 
 interface ICustomer {
-  name: string; 
-  phone: string;
+  name: string;
+  // Both mobile numbers are optional
+  phone?: string;
   phone2?: string;
   address: string;
   gstNumber?: string;
@@ -15,7 +16,7 @@ interface ICustomer {
 const customerSchema = new Schema<ICustomer>(
   {
     name: { type: String, required: true },
-    phone: { type: String, required: true },
+    phone: { type: String },
     phone2: { type: String },
     address: { type: String, required: true },
     gstNumber: { type: String },
