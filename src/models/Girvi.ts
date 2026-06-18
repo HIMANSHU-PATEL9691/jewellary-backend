@@ -22,9 +22,7 @@ function getElapsedMonthsAndDays(dateStr: string) {
 }
 
 function calculateCompoundInterest(principal: number, monthlyRatePct: number, months: number) {
-  const annualRate = (monthlyRatePct * 12) / 100;
-  const years = months / 12;
-  const totalPayable = principal * Math.pow(1 + annualRate, years);
+  const totalPayable = principal * Math.pow(1 + (monthlyRatePct / 100), months);
   const interest = totalPayable - principal;
 
   return {
