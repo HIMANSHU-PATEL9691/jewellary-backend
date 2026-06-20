@@ -20,7 +20,11 @@ async function restoreInventoryFromInvoiceItems(
 
     for (const item of invoiceItems) {
       const normalizedProductId = normalizeInvoiceProductId(item.productId);
-      if (!normalizedProductId || normalizedProductId.startsWith('manual-')) {
+      if (
+        !normalizedProductId ||
+        normalizedProductId === 'manual' ||
+        normalizedProductId.startsWith('manual-')
+      ) {
         continue;
       }
 
@@ -78,6 +82,7 @@ async function restoreInventoryFromInvoiceItems(
 // Deduct inventory stock/weight when invoice is created
 function normalizeInvoiceProductId(productId: string) {
   if (!productId || typeof productId !== 'string') return productId;
+  if (productId === 'manual') return 'manual';
   if (productId.startsWith('manual-')) return productId;
   if (productId.includes('__GW_')) {
     return productId.split('__GW_')[0];
@@ -127,6 +132,11 @@ async function applyInventoryDeductionFromInvoiceItems(
         } catch {
           // ignore
         }
+      }
+
+      // Skip placeholder/manual lines even if they reach this point (safety net)
+      if (item.productId === 'manual' || normalizedProductId === 'manual') {
+        continue;
       }
 
       if (!inventory) {
