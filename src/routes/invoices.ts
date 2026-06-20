@@ -130,11 +130,14 @@ async function applyInventoryDeductionFromInvoiceItems(
       }
 
       if (!inventory) {
-        throw new Error(`Inventory item not found for productId: ${item.productId}`);
+        throw new Error(
+          `Inventory item not found for productId: ${item.productId} (normalized: ${normalizedProductId}, qty: ${item.qty}, netWeight: ${item.netWeight})`,
+        );
       }
 
       const deductStock = item.qty;
       const deductWt = item.netWeight * item.qty;
+
 
 
       if (inventory.stock < deductStock) {
@@ -185,16 +188,59 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+function isDuplicateInvoiceNumberError(error: any) {
+  const msg = typeof error?.message === 'string' ? error.message : '';
+  return msg.includes('duplicate key error') && msg.includes('number');
+}
+
+function generateNewInvoiceNumber(baseNumber?: string) {
+  // Keep INV sequence style: INV-000001, INV-000002, ...
+  // If baseNumber already matches INV-<digits>, increment it.
+  // Otherwise fallback to current timestamp (still prefixed with INV-).
+  if (baseNumber && typeof baseNumber === 'string') {
+    const m = baseNumber.match(/^(INV-)(\d+)$/i);
+    if (m) {
+      const prefix = m[1];
+      const digits = m[2];
+      const width = digits.length;
+      const next = String(Number(digits) + 1).padStart(width, '0');
+      return `${prefix}${next}`;
+    }
+
+    const m2 = baseNumber.match(/^(INV-\s*?)(\d+)$/i);
+    if (m2) {
+      const prefix = m2[1].replace(/\s+/g, '');
+      const digits = m2[2];
+      const width = digits.length;
+      const next = String(Number(digits) + 1).padStart(width, '0');
+      return `${prefix}${next}`;
+    }
+  }
+
+  const now = Date.now();
+  const rand = Math.floor(Math.random() * 1000);
+  return `INV-${now}${rand}`;
+}
+
 router.post('/', async (req: Request, res: Response) => {
-  try {
+  const maxAttempts = 10;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const session = await Inventory.startSession();
     session.startTransaction();
 
     try {
-      const invoice = new Invoice(req.body);
+      const invoicePayload = { ...req.body };
+
+      // On retries, regenerate number (only if it's duplicate-prone / provided).
+      if (attempt > 1) {
+        invoicePayload.number = generateNewInvoiceNumber(req.body?.number);
+      }
+
+      const invoice = new Invoice(invoicePayload);
       const savedInvoice = await invoice.save({ session });
 
-      // Deduct inventory based on invoice items
+      // Deduct inventory based on invoice items (only after invoice save succeeds)
       await applyInventoryDeductionFromInvoiceItems(
         savedInvoice.items.map((it) => ({
           productId: it.productId,
@@ -208,30 +254,96 @@ router.post('/', async (req: Request, res: Response) => {
       session.endSession();
 
       res.status(201).json(savedInvoice);
+      return;
     } catch (error: any) {
       await session.abortTransaction();
       session.endSession();
-      console.error('[POST /api/invoices] deduction failed:', error);
-      res.status(400).json({ error: error?.message || 'Failed to deduct inventory' });
+
+      // If invoice number duplicated, retry with new number.
+      if (isDuplicateInvoiceNumberError(error) && attempt < maxAttempts) {
+        continue;
+      }
+
+      console.error('[POST /api/invoices] failed:', error);
+      const msg = error?.message || 'Failed to create invoice';
+
+      if (isDuplicateInvoiceNumberError(error)) {
+        res.status(409).json({ error: 'Invoice number already exists. Please regenerate with a new number.' });
+        return;
+      }
+
+      res.status(400).json({ error: msg });
+      return;
     }
-  } catch (error: any) {
-    console.error('[POST /api/invoices] session failed:', error);
-    res.status(500).json({ error: error?.message || 'Failed to create invoice' });
   }
+
+  res.status(500).json({ error: 'Failed to create invoice after multiple attempts due to duplicate invoice number.' });
 });
 
 
 
 router.put('/:id', async (req: Request, res: Response) => {
+  const session = await Inventory.startSession();
+  session.startTransaction();
+
   try {
-    const invoice = await Invoice.findByIdAndUpdate(req.params.id, req.body, {
+    const existingInvoice = await Invoice.findById(req.params.id).session(session);
+    if (!existingInvoice) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    // Restore old inventory (based on old items)
+    await restoreInventoryFromInvoiceItems(
+      existingInvoice.items.map((it) => ({
+        productId: it.productId,
+        netWeight: it.netWeight,
+        qty: it.qty,
+      })),
+      session,
+    );
+
+    // Update invoice
+    const updatedInvoice = await Invoice.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
+      session,
     });
-    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-    res.json(invoice);
+
+    if (!updatedInvoice) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    // Deduct new inventory (based on updated items)
+    await applyInventoryDeductionFromInvoiceItems(
+      updatedInvoice.items.map((it) => ({
+        productId: it.productId,
+        netWeight: it.netWeight,
+        qty: it.qty,
+      })),
+      session,
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.json(updatedInvoice);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error('[PUT /api/invoices] failed:', error);
+    const msg = error?.message || 'Failed to update invoice';
+
+    // Duplicate invoice number on update (unique index)
+    if (isDuplicateInvoiceNumberError(error)) {
+      return res.status(409).json({ error: 'Invoice number already exists.' });
+    }
+
+    return res.status(400).json({ error: msg });
   }
 });
 
