@@ -252,34 +252,28 @@ router.post('/', async (req: Request, res: Response) => {
       // (Do NOT rely on frontend-calculated totals.)
       const items = Array.isArray(invoicePayload.items) ? invoicePayload.items : [];
 
-      // Rule: do NOT multiply by qty/pcs.
-      // User can fill any amount per item; compute total basis from:
-      //   netWeight * ratePerGram + makingCharge
-      // and then apply GST on that basis.
-      const itemSubtotal = items.reduce((sum: number, it: any) => {
-        const netWeight = Number(it?.netWeight ?? 0);
-        const ratePerGram = Number(it?.ratePerGram ?? 0);
-        const makingCharge = Number(it?.makingCharge ?? 0);
-        const stoneCharge = Number(it?.stoneCharge ?? 0);
-        // IMPORTANT:
-        // Do NOT multiply by qty/pcs.
-        return sum + netWeight * ratePerGram + makingCharge + stoneCharge;
-      }, 0);
+      let itemSubtotal = 0;
+      let gstAmount = 0;
 
-      const gstAmount = items.reduce((sum: number, it: any) => {
+      items.forEach((it: any) => {
         const netWeight = Number(it?.netWeight ?? 0);
         const ratePerGram = Number(it?.ratePerGram ?? 0);
         const makingCharge = Number(it?.makingCharge ?? 0);
         const stoneCharge = Number(it?.stoneCharge ?? 0);
-        const lineBase = netWeight * ratePerGram + makingCharge + stoneCharge;
+        const qty = Number(it?.qty ?? 1);
+        const lineBase = (netWeight * ratePerGram + makingCharge + stoneCharge) * qty;
         const gstPct = Number(it?.gstPct ?? 0);
-        return sum + lineBase * (gstPct / 100);
-      }, 0);
-
+        itemSubtotal += lineBase;
+        if (invoicePayload.type === 'GST') {
+          gstAmount += lineBase * (gstPct / 100);
+        }
+      });
 
       invoicePayload.subtotal = itemSubtotal;
       invoicePayload.gstAmount = gstAmount;
-      invoicePayload.total = itemSubtotal + gstAmount;
+
+      const preRound = itemSubtotal + gstAmount - (Number(invoicePayload.discount) || 0) - (Number(invoicePayload.oldGoldAmount) || 0);
+      invoicePayload.total = Math.round(preRound);
 
       const invoice = new Invoice(invoicePayload);
       const savedInvoice = await invoice.save({ session });
