@@ -56,10 +56,10 @@ async function restoreInventoryFromInvoiceItems(
       }
 
       const restoreStock = item.qty;
-      const restoreWt = item.netWeight * item.qty;
+      const restoreWt = item.netWeight; // Do not multiply by qty, netWeight is total.
 
       inventory.stock = inventory.stock + restoreStock;
-      inventory.netWeight = inventory.netWeight + restoreWt;
+      inventory.netWeight = inventory.netWeight + restoreWt; // Use the total net weight from the line
 
       await inventory.save({ session: ownSession });
     }
@@ -147,7 +147,7 @@ async function applyInventoryDeductionFromInvoiceItems(
 
       const deductStock = item.qty;
       // Deduction is based on total net weight for qty
-      const deductWt = item.netWeight * item.qty;
+      const deductWt = item.netWeight; // Do not multiply by qty, netWeight is total.
 
 
 
@@ -159,7 +159,7 @@ async function applyInventoryDeductionFromInvoiceItems(
       }
 
       inventory.stock = inventory.stock - deductStock;
-      inventory.netWeight = inventory.netWeight - deductWt;
+      inventory.netWeight = inventory.netWeight - deductWt; // Use the total net weight from the line
 
       await inventory.save({ session: ownSession });
     }
@@ -259,9 +259,8 @@ router.post('/', async (req: Request, res: Response) => {
         const netWeight = Number(it?.netWeight ?? 0);
         const ratePerGram = Number(it?.ratePerGram ?? 0);
         const makingCharge = Number(it?.makingCharge ?? 0);
-        const stoneCharge = Number(it?.stoneCharge ?? 0);
-        const qty = Number(it?.qty ?? 1);
-        const lineBase = (netWeight * ratePerGram + makingCharge + stoneCharge) * qty;
+        // The netWeight is the total for the line, so we do not multiply by quantity.
+        const lineBase = netWeight * ratePerGram + makingCharge;
         const gstPct = Number(it?.gstPct ?? 0);
         itemSubtotal += lineBase;
         if (invoicePayload.type === 'GST') {
