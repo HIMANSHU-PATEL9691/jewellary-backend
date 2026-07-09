@@ -1,6 +1,7 @@
 import { Schema, model } from 'mongoose';
 
 interface IPurchases {
+  type: 'GST' | 'NON-GST';
   billNo: string;
   date: string;
   supplierId?: string;
@@ -20,6 +21,7 @@ interface IPurchases {
 
 const purchasesSchema = new Schema<IPurchases>(
   {
+    type: { type: String, enum: ['GST', 'NON-GST'], default: 'NON-GST' },
     billNo: { type: String, required: true },
     date: { type: String, required: true },
     supplierId: { type: String },

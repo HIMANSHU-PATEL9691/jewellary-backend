@@ -261,12 +261,16 @@ router.post('/', async (req: Request, res: Response) => {
         const makingCharge = Number(it?.makingCharge ?? 0);
         // The netWeight is the total for the line, so we do not multiply by quantity.
         const lineBase = netWeight * ratePerGram + makingCharge;
+        
         const gstPct = Number(it?.gstPct ?? 0);
         itemSubtotal += lineBase;
         if (invoicePayload.type === 'GST') {
           gstAmount += lineBase * (gstPct / 100);
         }
       });
+
+      // Ensure hsnCode is preserved on items
+      invoicePayload.items = items;
 
       invoicePayload.subtotal = itemSubtotal;
       invoicePayload.gstAmount = gstAmount;

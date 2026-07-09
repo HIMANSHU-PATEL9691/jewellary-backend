@@ -1,42 +1,47 @@
-import { Schema, model } from 'mongoose';
+import { Schema, model, Document } from 'mongoose';
 
-interface IInventory {
+export interface IInventory extends Document {
   name: string;
   category: string;
   subcategory?: string;
   note?: string;
   huid?: string;
-  purity: string;
+  hsnCode?: string;
+  purity?: string;
   grossWeight: number;
   netWeight: number;
   stoneWeight: number;
   makingCharge: number;
+  makingChargePct?: number;
   gstPct: number;
+  ratePerGram: number;
   stock: number;
-  barcode?: string;
+  barcode: string;
   imageUrl?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  imageUrls?: string[];
+  type?: 'GST' | 'NON-GST';
 }
 
-const inventorySchema = new Schema<IInventory>(
-  {
-    name: { type: String, required: true },
-    category: { type: String, required: true, default: 'Gold' },
-    subcategory: { type: String },
-    note: { type: String },
-    huid: { type: String },
-    purity: { type: String, default: '22K' },
-    grossWeight: { type: Number, required: true, default: 0 },
-    netWeight: { type: Number, required: true, default: 0 },
-    stoneWeight: { type: Number, required: true, default: 0 },
-    makingCharge: { type: Number, required: true, default: 500 },
-    gstPct: { type: Number, required: true, default: 3 },
-    stock: { type: Number, required: true, default: 1 },
-    barcode: { type: String },
-    imageUrl: { type: String },
-  },
-  { timestamps: true }
-);
+const InventorySchema = new Schema<IInventory>({
+  name: { type: String, required: true },
+  category: { type: String, required: true },
+  subcategory: String,
+  note: String,
+  huid: String,
+  hsnCode: { type: String, default: '71131910' },
+  purity: String,
+  grossWeight: Number,
+  netWeight: { type: Number, required: true },
+  stoneWeight: Number,
+  makingCharge: Number,
+  makingChargePct: Number,
+  gstPct: Number,
+  ratePerGram: Number,
+  stock: { type: Number, default: 1 },
+  barcode: { type: String, unique: true, required: true },
+  imageUrl: String,
+  imageUrls: [String],
+  type: { type: String, enum: ['GST', 'NON-GST'], default: 'NON-GST' },
+}, { timestamps: true, collection: 'inventory' });
 
-export const Inventory = model<IInventory>('Inventory', inventorySchema);
+export const Inventory = model<IInventory>('Inventory', InventorySchema);

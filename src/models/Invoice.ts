@@ -3,7 +3,8 @@ import { Schema, model } from 'mongoose';
 interface IInvoiceItem {
   productId: string;
   name: string;
-  purity: string;
+  purity?: string;
+  hsnCode?: string;
   netWeight: number;
   ratePerGram: number;
   makingCharge: number;
@@ -46,7 +47,8 @@ interface IInvoice {
 const invoiceItemSchema = new Schema<IInvoiceItem>({
   productId: { type: String, required: true },
   name: { type: String, required: true },
-  purity: { type: String, required: true },
+  purity: { type: String },
+  hsnCode: { type: String },
   netWeight: { type: Number, required: true },
   ratePerGram: { type: Number, required: true },
   makingCharge: { type: Number, required: true },
