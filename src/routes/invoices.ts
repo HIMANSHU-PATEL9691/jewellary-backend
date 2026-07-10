@@ -278,6 +278,11 @@ router.post('/', async (req: Request, res: Response) => {
       const preRound = itemSubtotal + gstAmount - (Number(invoicePayload.discount) || 0) - (Number(invoicePayload.oldGoldAmount) || 0);
       invoicePayload.total = Math.round(preRound);
 
+      // Use frontend-provided date if available, otherwise default to now.
+      if (invoicePayload.createdAt) {
+        invoicePayload.createdAt = new Date(invoicePayload.createdAt);
+      }
+
       const invoice = new Invoice(invoicePayload);
       const savedInvoice = await invoice.save({ session });
 
@@ -346,8 +351,14 @@ router.put('/:id', async (req: Request, res: Response) => {
       session,
     );
 
+    const updatePayload = { ...req.body };
+    // Use frontend-provided date if available
+    if (updatePayload.createdAt) {
+      updatePayload.createdAt = new Date(updatePayload.createdAt);
+    }
+
     // Update invoice
-    const updatedInvoice = await Invoice.findByIdAndUpdate(req.params.id, req.body, {
+    const updatedInvoice = await Invoice.findByIdAndUpdate(req.params.id, updatePayload, {
       new: true,
       runValidators: true,
       session,
