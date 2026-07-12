@@ -400,6 +400,46 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Update only invoice date (no inventory changes, no item/payment changes)
+router.put('/:id/date', async (req: Request, res: Response) => {
+  try {
+    if (!req.body?.createdAt) {
+      return res.status(400).json({ error: 'createdAt is required' });
+    }
+
+    const parsedDate = new Date(req.body.createdAt);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid createdAt date' });
+    }
+
+    const existingInvoice = await Invoice.findById(req.params.id);
+    if (!existingInvoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    // Set the new date on the main document
+    existingInvoice.createdAt = parsedDate;
+
+    // Update the date for each payment subdocument
+    (existingInvoice.payments || []).forEach((p: any) => {
+      p.date = parsedDate;
+    });
+
+    // Save the changes to the document and its subdocuments
+    const updatedInvoice = await existingInvoice.save({ validateBeforeSave: false });
+    
+    if (!updatedInvoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    return res.json(updatedInvoice);
+  } catch (error: any) {
+    console.error('[PUT /api/invoices/:id/date] failed:', error);
+    return res.status(400).json({ error: error?.message || 'Failed to update invoice date' });
+  }
+});
+
+
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const session = await Inventory.startSession();
