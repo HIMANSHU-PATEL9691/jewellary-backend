@@ -140,9 +140,10 @@ async function applyInventoryDeductionFromInvoiceItems(
       }
 
       if (!inventory) {
-        throw new Error(
-          `Inventory item not found for productId: ${item.productId} (normalized: ${normalizedProductId}, qty: ${item.qty}, netWeight: ${item.netWeight})`,
+        console.warn(
+          `Inventory item not found for productId during deduction: ${item.productId} (normalized: ${normalizedProductId}). Skipping stock update.`
         );
+        continue; // Skip if inventory not found
       }
 
       const deductStock = item.qty;
