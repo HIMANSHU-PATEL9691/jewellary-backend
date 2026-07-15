@@ -21,17 +21,6 @@ function getElapsedMonthsAndDays(dateStr: string) {
   return { months, days };
 }
 
-function calculateCompoundInterest(principal: number, monthlyRatePct: number, months: number) {
-  const totalPayable = principal * Math.pow(1 + (monthlyRatePct / 100), months);
-  const interest = totalPayable - principal;
-
-  return {
-    principal,
-    interest: Number(interest.toFixed(2)),
-    totalPayable: Number(totalPayable.toFixed(2)),
-  };
-}
-
 interface IItem {
   id?: string;
   itemType: string;
@@ -138,18 +127,56 @@ const girviSchema = new Schema<IGirvi>(
 girviSchema.methods.calculateInterestAmount = function () {
   const principal = this.loanAmount || 0;
   const monthlyRatePct = this.interestPct || 0;
+  if (!this.date || !principal || !monthlyRatePct) return 0;
+
   const { months, days } = getElapsedMonthsAndDays(this.date);
-  const totalMonths = months + days / 30;
-  return Math.round(calculateCompoundInterest(principal, monthlyRatePct, totalMonths).interest);
+  const monthlyRate = monthlyRatePct / 100;
+
+  // Rule: Simple interest for the first 12 months.
+  if (months < 12) {
+    const simpleInterest = principal * monthlyRate * months;
+    const dailyInterest = (principal * monthlyRate * days) / 30;
+    return Math.round(simpleInterest + dailyInterest);
+  } else {
+    // Rule: Calculate interest for the first 12 months (simple).
+    const interestAfter12Months = principal * monthlyRate * 12;
+    const principalAfter12Months = principal + interestAfter12Months;
+    // Rule: Calculate compound interest for the remaining full months.
+    const remainingMonths = months - 12;
+    const amountAfterCompounding = principalAfter12Months * Math.pow(1 + monthlyRate, remainingMonths);
+    const compoundInterest = amountAfterCompounding - principalAfter12Months;
+    // Rule: Calculate simple interest for the remaining days on the latest principal.
+    const dailyInterest = (amountAfterCompounding * monthlyRate * days) / 30;
+    // Rule: Sum all parts and round the final result.
+    return Math.round(interestAfter12Months + compoundInterest + dailyInterest);
+  }
 };
 
 girviSchema.methods.calculateForwardedInterestAmount = function () {
-  const principal = this.forwardedAmount || 0;
-  const monthlyRatePct = this.forwardedInterestPct || 0;
+  const P = this.forwardedAmount || 0;
+  const monthlyRatePct = this.forwardedInterestPct || this.interestPct || 0;
   const startDate = this.forwardedDate || this.date;
+  if (!startDate || !P || !monthlyRatePct) return 0;
+
   const { months, days } = getElapsedMonthsAndDays(startDate);
-  const totalMonths = months + days / 30;
-  return Math.round(calculateCompoundInterest(principal, monthlyRatePct, totalMonths).interest);
+  const monthlyRate = monthlyRatePct / 100;
+
+  if (months < 12) {
+    const simpleInterest = P * monthlyRate * months;
+    const dailyInterest = (P * monthlyRate * days) / 30;
+    return Math.round(simpleInterest + dailyInterest);
+  } else {
+    const interestAfter12Months = P * monthlyRate * 12;
+    const principalAfter12Months = P + interestAfter12Months;
+
+    const remainingMonths = months - 12;
+    const amountAfterCompounding = principalAfter12Months * Math.pow(1 + monthlyRate, remainingMonths);
+    const compoundInterest = amountAfterCompounding - principalAfter12Months;
+
+    const dailyInterest = (amountAfterCompounding * monthlyRate * days) / 30;
+
+    return Math.round(interestAfter12Months + compoundInterest + dailyInterest);
+  }
 };
 
 girviSchema.virtual('interestAmount').get(function () {
