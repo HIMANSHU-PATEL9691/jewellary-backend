@@ -5,9 +5,30 @@ import { Inventory } from '../models/Inventory';
 const router = Router();
 
 
+function parseItemWeights(item: { productId: string; grossWeight?: number; netWeight: number; stoneWeight?: number }) {
+  let grossWt = item.grossWeight;
+  let stoneWt = item.stoneWeight;
+  let netWt = item.netWeight;
+
+  if ((grossWt === undefined || grossWt === null) && item.productId && typeof item.productId === 'string' && item.productId.includes('__GW_')) {
+    const parts = item.productId.split('__GW_');
+    if (parts[1]) {
+      const sub = parts[1].split('__SW_');
+      if (sub[0]) grossWt = Number(sub[0]);
+      if (sub[1]) stoneWt = Number(sub[1]);
+    }
+  }
+
+  const net = Number(netWt || 0);
+  const gross = Number(grossWt !== undefined && grossWt !== null && !isNaN(Number(grossWt)) ? grossWt : net);
+  const stone = Number(stoneWt !== undefined && stoneWt !== null && !isNaN(Number(stoneWt)) ? stoneWt : 0);
+
+  return { grossWt: gross, netWt: net, stoneWt: stone };
+}
+
 // Restore inventory stock/weight when invoice is deleted or items are removed
 async function restoreInventoryFromInvoiceItems(
-  invoiceItems: Array<{ productId: string; netWeight: number; qty: number }>,
+  invoiceItems: Array<{ productId: string; grossWeight?: number; netWeight: number; stoneWeight?: number; qty: number }>,
   session: any = null,
 ) {
   const ownSession = session ?? await Inventory.startSession();
@@ -42,6 +63,16 @@ async function restoreInventoryFromInvoiceItems(
         inventory = await Inventory.findOne({ huid: normalizedProductId }).session(ownSession);
       }
 
+      // If not found, try by barcode
+      if (!inventory) {
+        inventory = await Inventory.findOne({ barcode: normalizedProductId }).session(ownSession);
+      }
+
+      // If not found, try by name
+      if (!inventory) {
+        inventory = await Inventory.findOne({ name: normalizedProductId }).session(ownSession);
+      }
+
       // If still not found, try as _id string
       if (!inventory) {
         try {
@@ -55,11 +86,18 @@ async function restoreInventoryFromInvoiceItems(
         continue; // Skip if inventory not found during restoration
       }
 
-      const restoreStock = item.qty;
-      const restoreWt = item.netWeight; // Do not multiply by qty, netWeight is total.
+      const { grossWt: restoreGrossWt, netWt: restoreNetWt, stoneWt: restoreStoneWt } = parseItemWeights(item);
+      const restoreStock = Number(item.qty || 1);
 
-      inventory.stock = inventory.stock + restoreStock;
-      inventory.netWeight = inventory.netWeight + restoreWt; // Use the total net weight from the line
+      const currentStock = Number(inventory.stock ?? 0);
+      const currentNetWt = Number(inventory.netWeight ?? 0);
+      const currentGrossWt = Number(inventory.grossWeight !== undefined && inventory.grossWeight !== null ? inventory.grossWeight : currentNetWt);
+      const currentStoneWt = Number(inventory.stoneWeight ?? 0);
+
+      inventory.stock = currentStock + restoreStock;
+      inventory.netWeight = Number((currentNetWt + restoreNetWt).toFixed(3));
+      inventory.grossWeight = Number((currentGrossWt + restoreGrossWt).toFixed(3));
+      inventory.stoneWeight = Number((currentStoneWt + restoreStoneWt).toFixed(3));
 
       await inventory.save({ session: ownSession });
     }
@@ -91,7 +129,7 @@ function normalizeInvoiceProductId(productId: string) {
 }
 
 async function applyInventoryDeductionFromInvoiceItems(
-  invoiceItems: Array<{ productId: string; netWeight: number; qty: number }>,
+  invoiceItems: Array<{ productId: string; grossWeight?: number; netWeight: number; stoneWeight?: number; qty: number }>,
   session: any = null,
 ) {
   const ownSession = session ?? await Inventory.startSession();
@@ -124,8 +162,17 @@ async function applyInventoryDeductionFromInvoiceItems(
         inventory = await Inventory.findOne({ huid: normalizedProductId }).session(ownSession);
       }
 
-      // 3) If still not found, try matching by _id as plain string
-      // (in case mongoose is able to treat it without cast)
+      // 3) If not found, try matching by barcode
+      if (!inventory) {
+        inventory = await Inventory.findOne({ barcode: normalizedProductId }).session(ownSession);
+      }
+
+      // 4) If not found, try matching by name
+      if (!inventory) {
+        inventory = await Inventory.findOne({ name: normalizedProductId }).session(ownSession);
+      }
+
+      // 5) If still not found, try matching by _id as plain string
       if (!inventory) {
         try {
           inventory = await Inventory.findOne({ _id: normalizedProductId }).session(ownSession);
@@ -146,21 +193,18 @@ async function applyInventoryDeductionFromInvoiceItems(
         continue; // Skip if inventory not found
       }
 
-      const deductStock = item.qty;
-      // Deduction is based on total net weight for qty
-      const deductWt = item.netWeight; // Do not multiply by qty, netWeight is total.
+      const { grossWt: deductGrossWt, netWt: deductNetWt, stoneWt: deductStoneWt } = parseItemWeights(item);
+      const deductStock = Number(item.qty || 1);
 
+      const currentStock = Number(inventory.stock ?? 0);
+      const currentNetWt = Number(inventory.netWeight ?? 0);
+      const currentGrossWt = Number(inventory.grossWeight !== undefined && inventory.grossWeight !== null ? inventory.grossWeight : currentNetWt);
+      const currentStoneWt = Number(inventory.stoneWeight ?? 0);
 
-
-      if (inventory.stock < deductStock) {
-        throw new Error(`Insufficient stock for ${inventory._id}`);
-      }
-      if (inventory.netWeight < deductWt) {
-        throw new Error(`Insufficient wt for ${inventory._id}`);
-      }
-
-      inventory.stock = inventory.stock - deductStock;
-      inventory.netWeight = inventory.netWeight - deductWt; // Use the total net weight from the line
+      inventory.stock = Math.max(0, currentStock - deductStock);
+      inventory.grossWeight = Math.max(0, Number((currentGrossWt - deductGrossWt).toFixed(3)));
+      inventory.stoneWeight = Math.max(0, Number((currentStoneWt - deductStoneWt).toFixed(3)));
+      inventory.netWeight = Math.max(0, Number((currentNetWt - deductNetWt).toFixed(3)));
 
       await inventory.save({ session: ownSession });
     }
@@ -290,9 +334,11 @@ router.post('/', async (req: Request, res: Response) => {
 
       // Deduct inventory based on invoice items (only after invoice save succeeds)
       await applyInventoryDeductionFromInvoiceItems(
-        savedInvoice.items.map((it) => ({
+        savedInvoice.items.map((it: any) => ({
           productId: it.productId,
+          grossWeight: it.grossWeight,
           netWeight: it.netWeight,
+          stoneWeight: it.stoneWeight,
           qty: it.qty,
         })),
         session,
@@ -344,9 +390,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     // Restore old inventory (based on old items)
     await restoreInventoryFromInvoiceItems(
-      existingInvoice.items.map((it) => ({
+      existingInvoice.items.map((it: any) => ({
         productId: it.productId,
+        grossWeight: it.grossWeight,
         netWeight: it.netWeight,
+        stoneWeight: it.stoneWeight,
         qty: it.qty,
       })),
       session,
@@ -373,9 +421,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     // Deduct new inventory (based on updated items)
     await applyInventoryDeductionFromInvoiceItems(
-      updatedInvoice.items.map((it) => ({
+      updatedInvoice.items.map((it: any) => ({
         productId: it.productId,
+        grossWeight: it.grossWeight,
         netWeight: it.netWeight,
+        stoneWeight: it.stoneWeight,
         qty: it.qty,
       })),
       session,
@@ -402,7 +452,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // Update only invoice date (no inventory changes, no item/payment changes)
-router.put('/:id/date', async (req: Request, res: Response) => {
+const updateInvoiceDateHandler = async (req: Request, res: Response) => {
   try {
     if (!req.body?.createdAt) {
       return res.status(400).json({ error: 'createdAt is required' });
@@ -435,10 +485,13 @@ router.put('/:id/date', async (req: Request, res: Response) => {
 
     return res.json(updatedInvoice);
   } catch (error: any) {
-    console.error('[PUT /api/invoices/:id/date] failed:', error);
+    console.error('[PUT/PATCH /api/invoices/:id/date] failed:', error);
     return res.status(400).json({ error: error?.message || 'Failed to update invoice date' });
   }
-});
+};
+
+router.put('/:id/date', updateInvoiceDateHandler);
+router.patch('/:id/date', updateInvoiceDateHandler);
 
 
 router.delete('/:id', async (req: Request, res: Response) => {
@@ -455,9 +508,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
       // Restore inventory before deleting
       await restoreInventoryFromInvoiceItems(
-        invoice.items.map((it) => ({
+        invoice.items.map((it: any) => ({
           productId: it.productId,
+          grossWeight: it.grossWeight,
           netWeight: it.netWeight,
+          stoneWeight: it.stoneWeight,
           qty: it.qty,
         })),
         session,

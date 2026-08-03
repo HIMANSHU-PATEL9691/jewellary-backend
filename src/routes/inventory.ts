@@ -38,14 +38,21 @@ router.post('/', async (req: Request, res: Response) => {
 // Update inventory item
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const item = await Inventory.findByIdAndUpdate(req.params.id, req.body, {
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.id;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
+    delete updateData.__v;
+
+    const item = await Inventory.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     res.json(item);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: error.message || 'Failed to update item' });
   }
 });
 

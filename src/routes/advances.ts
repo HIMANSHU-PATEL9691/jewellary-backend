@@ -13,6 +13,17 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
+// Get advance by ID
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const advance = await Advance.findById(req.params.id);
+    if (!advance) return res.status(404).json({ error: 'Advance not found' });
+    res.json(advance);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch advance' });
+  }
+});
+
 // Create advance
 router.post('/', async (req: Request, res: Response) => {
   try {

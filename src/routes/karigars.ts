@@ -27,16 +27,20 @@ router.get('/:id', async (req: Request, res: Response) => {
 // Create karigar
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const karigar = new Karigars(req.body);
+    const karigarData = { ...req.body };
+    if (!karigarData.mobile && karigarData.phone) {
+      karigarData.mobile = karigarData.phone;
+    }
+    if (!karigarData.mobile || karigarData.mobile.trim() === '') {
+      karigarData.mobile = `k_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+    if (!karigarData.email || karigarData.email.trim() === '') {
+      karigarData.email = `k_${Date.now()}@placeholder.com`;
+    }
+
+    const karigar = new Karigars(karigarData);
     if (req.body.username) karigar.set('username', req.body.username, { strict: false });
     if (req.body.password) karigar.set('password', req.body.password, { strict: false });
-    
-    // Generate guaranteed unique hidden values to bypass any strict MongoDB unique indexes 
-    // so the admin can create UNLIMITED Karigars without E11000 crash errors!
-    karigar.set('phone', `k_${Date.now()}_${Math.random().toString(36).slice(2)}`, { strict: false });
-    if (!req.body.email) {
-      karigar.set('email', `k_${Date.now()}@placeholder.com`, { strict: false });
-    }
 
     await karigar.save();
     res.status(201).json(karigar);
