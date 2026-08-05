@@ -27,97 +27,6 @@ function parseItemWeights(item: { productId: string; grossWeight?: number; netWe
 }
 
 // Restore inventory stock/weight when invoice is deleted or items are removed
-async function restoreInventoryFromInvoiceItems(
-  invoiceItems: Array<{ productId: string; grossWeight?: number; netWeight: number; stoneWeight?: number; qty: number }>,
-  session: any = null,
-) {
-  const ownSession = session ?? await Inventory.startSession();
-  const manageSession = !session;
-
-  try {
-    if (manageSession) {
-      ownSession.startTransaction();
-    }
-
-    for (const item of invoiceItems) {
-      const normalizedProductId = normalizeInvoiceProductId(item.productId);
-      if (
-        !normalizedProductId ||
-        normalizedProductId === 'manual' ||
-        normalizedProductId.startsWith('manual-')
-      ) {
-        continue;
-      }
-
-      let inventory = null as any;
-
-      // Try to find inventory by _id first
-      try {
-        inventory = await Inventory.findById(normalizedProductId).session(ownSession);
-      } catch {
-        // ignore cast errors
-      }
-
-      // If not found, try by huid
-      if (!inventory) {
-        inventory = await Inventory.findOne({ huid: normalizedProductId }).session(ownSession);
-      }
-
-      // If not found, try by barcode
-      if (!inventory) {
-        inventory = await Inventory.findOne({ barcode: normalizedProductId }).session(ownSession);
-      }
-
-      // If not found, try by name
-      if (!inventory) {
-        inventory = await Inventory.findOne({ name: normalizedProductId }).session(ownSession);
-      }
-
-      // If still not found, try as _id string
-      if (!inventory) {
-        try {
-          inventory = await Inventory.findOne({ _id: normalizedProductId }).session(ownSession);
-        } catch {
-          // ignore
-        }
-      }
-
-      if (!inventory) {
-        continue; // Skip if inventory not found during restoration
-      }
-
-      const { grossWt: restoreGrossWt, netWt: restoreNetWt, stoneWt: restoreStoneWt } = parseItemWeights(item);
-      const restoreStock = Number(item.qty || 1);
-
-      const currentStock = Number(inventory.stock ?? 0);
-      const currentNetWt = Number(inventory.netWeight ?? 0);
-      const currentGrossWt = Number(inventory.grossWeight !== undefined && inventory.grossWeight !== null ? inventory.grossWeight : currentNetWt);
-      const currentStoneWt = Number(inventory.stoneWeight ?? 0);
-
-      inventory.stock = currentStock + restoreStock;
-      inventory.netWeight = Number((currentNetWt + restoreNetWt).toFixed(3));
-      inventory.grossWeight = Number((currentGrossWt + restoreGrossWt).toFixed(3));
-      inventory.stoneWeight = Number((currentStoneWt + restoreStoneWt).toFixed(3));
-
-      await inventory.save({ session: ownSession });
-    }
-
-    if (manageSession) {
-      await ownSession.commitTransaction();
-    }
-  } catch (err) {
-    if (manageSession) {
-      await ownSession.abortTransaction();
-    }
-    throw err;
-  } finally {
-    if (manageSession) {
-      ownSession.endSession();
-    }
-  }
-}
-
-// Deduct inventory stock/weight when invoice is created
 function normalizeInvoiceProductId(productId: string) {
   if (!productId || typeof productId !== 'string') return productId;
   if (productId === 'manual') return 'manual';
@@ -128,98 +37,158 @@ function normalizeInvoiceProductId(productId: string) {
   return productId;
 }
 
-async function applyInventoryDeductionFromInvoiceItems(
-  invoiceItems: Array<{ productId: string; grossWeight?: number; netWeight: number; stoneWeight?: number; qty: number }>,
+function extractIdentifiersFromName(name: string) {
+  if (!name || typeof name !== 'string') return { cleanName: name || '', huid: null, barcode: null };
+
+  let huid: string | null = null;
+  let barcode: string | null = null;
+
+  const huidMatch = name.match(/\(HUID:\s*([^)]+)\)/i);
+  if (huidMatch && huidMatch[1]) {
+    huid = huidMatch[1].trim();
+  }
+
+  const bcMatch = name.match(/\(BC:\s*([^)]+)\)/i);
+  if (bcMatch && bcMatch[1]) {
+    barcode = bcMatch[1].trim();
+  }
+
+  const cleanName = name
+    .replace(/\(HUID:\s*[^)]+\)/gi, '')
+    .replace(/\(BC:\s*[^)]+\)/gi, '')
+    .trim();
+
+  return { cleanName, huid, barcode };
+}
+
+async function findInventoryItemForItem(
+  item: { productId?: string; name?: string },
+  session: any = null
+) {
+  const productId = item.productId || '';
+  const normalizedProductId = normalizeInvoiceProductId(productId);
+  const { cleanName, huid: extractedHuid, barcode: extractedBc } = extractIdentifiersFromName(item.name || '');
+
+  // 1. Try by _id if valid ObjectId string
+  if (normalizedProductId && !normalizedProductId.startsWith('manual-') && normalizedProductId !== 'manual') {
+    try {
+      const inv = session
+        ? await Inventory.findById(normalizedProductId).session(session)
+        : await Inventory.findById(normalizedProductId);
+      if (inv) return inv;
+    } catch {
+      // ignore cast error
+    }
+  }
+
+  // 2. Build array of queries to attempt
+  const queries: Array<Record<string, any>> = [];
+
+  if (normalizedProductId && !normalizedProductId.startsWith('manual-') && normalizedProductId !== 'manual') {
+    queries.push({ huid: normalizedProductId });
+    queries.push({ barcode: normalizedProductId });
+    queries.push({ name: normalizedProductId });
+    queries.push({ _id: normalizedProductId });
+  }
+
+  if (extractedHuid) {
+    queries.push({ huid: extractedHuid });
+  }
+
+  if (extractedBc) {
+    queries.push({ barcode: extractedBc });
+  }
+
+  if (cleanName) {
+    queries.push({ name: cleanName });
+    queries.push({ huid: cleanName });
+    queries.push({ barcode: cleanName });
+  }
+
+  if (item.name && item.name !== cleanName) {
+    queries.push({ name: item.name });
+  }
+
+  for (const q of queries) {
+    try {
+      const found = session
+        ? await Inventory.findOne(q).session(session)
+        : await Inventory.findOne(q);
+      if (found) return found;
+    } catch {
+      // ignore query error
+    }
+  }
+
+  return null;
+}
+
+async function restoreInventoryFromInvoiceItems(
+  invoiceItems: Array<{ productId: string; name?: string; grossWeight?: number; netWeight: number; stoneWeight?: number; qty: number }>,
   session: any = null,
 ) {
-  const ownSession = session ?? await Inventory.startSession();
-  const manageSession = !session;
+  for (const item of invoiceItems) {
+    const inventory = await findInventoryItemForItem(item, session);
 
-  try {
-    if (manageSession) {
-      ownSession.startTransaction();
+    if (!inventory) {
+      console.warn(
+        `[Inventory Restoration] Item not found for productId: ${item.productId}, name: ${item.name}`
+      );
+      continue;
     }
 
-    for (const item of invoiceItems) {
-      const normalizedProductId = normalizeInvoiceProductId(item.productId);
-      if (!normalizedProductId || normalizedProductId.startsWith('manual-')) {
-        continue;
-      }
+    const { grossWt: restoreGrossWt, netWt: restoreNetWt, stoneWt: restoreStoneWt } = parseItemWeights(item as any);
+    const restoreStock = Number(item.qty || 1);
 
-      // productId may be an actual Inventory document _id or some other identifier.
-      // Try multiple matching strategies.
-      let inventory = null as any;
+    const currentStock = Number(inventory.stock ?? 0);
+    const currentNetWt = Number(inventory.netWeight ?? 0);
+    const currentGrossWt = Number(inventory.grossWeight !== undefined && inventory.grossWeight !== null ? inventory.grossWeight : currentNetWt);
+    const currentStoneWt = Number(inventory.stoneWeight ?? 0);
 
-      // 1) Try _id match (works only if productId is a valid ObjectId)
-      try {
-        inventory = await Inventory.findById(normalizedProductId).session(ownSession);
-      } catch {
-        // ignore cast errors
-      }
+    inventory.stock = currentStock + restoreStock;
+    inventory.grossWeight = Number((currentGrossWt + restoreGrossWt).toFixed(3));
+    inventory.stoneWeight = Number((currentStoneWt + restoreStoneWt).toFixed(3));
+    inventory.netWeight = Number((currentNetWt + restoreNetWt).toFixed(3));
 
-      // 2) If not found, try matching by huid
-      if (!inventory) {
-        inventory = await Inventory.findOne({ huid: normalizedProductId }).session(ownSession);
-      }
+    if (session) {
+      await inventory.save({ session });
+    } else {
+      await inventory.save();
+    }
+  }
+}
 
-      // 3) If not found, try matching by barcode
-      if (!inventory) {
-        inventory = await Inventory.findOne({ barcode: normalizedProductId }).session(ownSession);
-      }
+async function applyInventoryDeductionFromInvoiceItems(
+  invoiceItems: Array<{ productId: string; name?: string; grossWeight?: number; netWeight: number; stoneWeight?: number; qty: number }>,
+  session: any = null,
+) {
+  for (const item of invoiceItems) {
+    const inventory = await findInventoryItemForItem(item, session);
 
-      // 4) If not found, try matching by name
-      if (!inventory) {
-        inventory = await Inventory.findOne({ name: normalizedProductId }).session(ownSession);
-      }
-
-      // 5) If still not found, try matching by _id as plain string
-      if (!inventory) {
-        try {
-          inventory = await Inventory.findOne({ _id: normalizedProductId }).session(ownSession);
-        } catch {
-          // ignore
-        }
-      }
-
-      // Skip placeholder/manual lines even if they reach this point (safety net)
-      if (item.productId === 'manual' || normalizedProductId === 'manual') {
-        continue;
-      }
-
-      if (!inventory) {
-        console.warn(
-          `Inventory item not found for productId during deduction: ${item.productId} (normalized: ${normalizedProductId}). Skipping stock update.`
-        );
-        continue; // Skip if inventory not found
-      }
-
-      const { grossWt: deductGrossWt, netWt: deductNetWt, stoneWt: deductStoneWt } = parseItemWeights(item);
-      const deductStock = Number(item.qty || 1);
-
-      const currentStock = Number(inventory.stock ?? 0);
-      const currentNetWt = Number(inventory.netWeight ?? 0);
-      const currentGrossWt = Number(inventory.grossWeight !== undefined && inventory.grossWeight !== null ? inventory.grossWeight : currentNetWt);
-      const currentStoneWt = Number(inventory.stoneWeight ?? 0);
-
-      inventory.stock = Math.max(0, currentStock - deductStock);
-      inventory.grossWeight = Math.max(0, Number((currentGrossWt - deductGrossWt).toFixed(3)));
-      inventory.stoneWeight = Math.max(0, Number((currentStoneWt - deductStoneWt).toFixed(3)));
-      inventory.netWeight = Math.max(0, Number((currentNetWt - deductNetWt).toFixed(3)));
-
-      await inventory.save({ session: ownSession });
+    if (!inventory) {
+      console.warn(
+        `[Inventory Deduction] Item not found for productId: ${item.productId}, name: ${item.name}`
+      );
+      continue;
     }
 
-    if (manageSession) {
-      await ownSession.commitTransaction();
-    }
-  } catch (err) {
-    if (manageSession) {
-      await ownSession.abortTransaction();
-    }
-    throw err;
-  } finally {
-    if (manageSession) {
-      ownSession.endSession();
+    const { grossWt: deductGrossWt, netWt: deductNetWt, stoneWt: deductStoneWt } = parseItemWeights(item as any);
+    const deductStock = Number(item.qty || 1);
+
+    const currentStock = Number(inventory.stock ?? 0);
+    const currentNetWt = Number(inventory.netWeight ?? 0);
+    const currentGrossWt = Number(inventory.grossWeight !== undefined && inventory.grossWeight !== null ? inventory.grossWeight : currentNetWt);
+    const currentStoneWt = Number(inventory.stoneWeight ?? 0);
+
+    inventory.stock = Math.max(0, currentStock - deductStock);
+    inventory.grossWeight = Math.max(0, Number((currentGrossWt - deductGrossWt).toFixed(3)));
+    inventory.stoneWeight = Math.max(0, Number((currentStoneWt - deductStoneWt).toFixed(3)));
+    inventory.netWeight = Math.max(0, Number((currentNetWt - deductNetWt).toFixed(3)));
+
+    if (session) {
+      await inventory.save({ session });
+    } else {
+      await inventory.save();
     }
   }
 }
@@ -278,23 +247,39 @@ function generateNewInvoiceNumber(baseNumber?: string) {
   return `INV-${now}${rand}`;
 }
 
+async function getOptionalTransactionSession() {
+  let session: any = null;
+  let isTransaction = false;
+  try {
+    session = await Inventory.startSession();
+    try {
+      session.startTransaction();
+      isTransaction = true;
+    } catch {
+      isTransaction = false;
+    }
+  } catch {
+    session = null;
+    isTransaction = false;
+  }
+  return { session, isTransaction };
+}
+
 router.post('/', async (req: Request, res: Response) => {
   const maxAttempts = 10;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const session = await Inventory.startSession();
-    session.startTransaction();
+    const { session, isTransaction } = await getOptionalTransactionSession();
 
     try {
       const invoicePayload = { ...req.body };
 
-      // On retries, regenerate number (only if it's duplicate-prone / provided).
+      // On retries, regenerate number (only if duplicate-prone)
       if (attempt > 1) {
         invoicePayload.number = generateNewInvoiceNumber(req.body?.number);
       }
 
       // Recalculate invoice totals using: netWeight * ratePerGram + makingCharge
-      // (Do NOT rely on frontend-calculated totals.)
       const items = Array.isArray(invoicePayload.items) ? invoicePayload.items : [];
 
       let itemSubtotal = 0;
@@ -304,7 +289,6 @@ router.post('/', async (req: Request, res: Response) => {
         const netWeight = Number(it?.netWeight ?? 0);
         const ratePerGram = Number(it?.ratePerGram ?? 0);
         const makingCharge = Number(it?.makingCharge ?? 0);
-        // The netWeight is the total for the line, so we do not multiply by quantity.
         const lineBase = netWeight * ratePerGram + makingCharge;
         
         const gstPct = Number(it?.gstPct ?? 0);
@@ -314,28 +298,25 @@ router.post('/', async (req: Request, res: Response) => {
         }
       });
 
-      // Ensure hsnCode is preserved on items
       invoicePayload.items = items;
-
       invoicePayload.subtotal = itemSubtotal;
       invoicePayload.gstAmount = gstAmount;
 
       const preRound = itemSubtotal + gstAmount - (Number(invoicePayload.discount) || 0) - (Number(invoicePayload.oldGoldAmount) || 0);
       invoicePayload.total = Math.round(preRound);
 
-      // Use frontend-provided date if available, otherwise default to now.
       if (invoicePayload.createdAt) {
         invoicePayload.createdAt = new Date(invoicePayload.createdAt);
       }
 
       const invoice = new Invoice(invoicePayload);
-      const savedInvoice = await invoice.save({ session });
+      const savedInvoice = session ? await invoice.save({ session }) : await invoice.save();
 
-
-      // Deduct inventory based on invoice items (only after invoice save succeeds)
+      // Deduct inventory based on invoice items
       await applyInventoryDeductionFromInvoiceItems(
         savedInvoice.items.map((it: any) => ({
           productId: it.productId,
+          name: it.name,
           grossWeight: it.grossWeight,
           netWeight: it.netWeight,
           stoneWeight: it.stoneWeight,
@@ -344,16 +325,23 @@ router.post('/', async (req: Request, res: Response) => {
         session,
       );
 
-      await session.commitTransaction();
-      session.endSession();
+      if (isTransaction && session) {
+        await session.commitTransaction();
+      }
+      if (session) {
+        session.endSession();
+      }
 
       res.status(201).json(savedInvoice);
       return;
     } catch (error: any) {
-      await session.abortTransaction();
-      session.endSession();
+      if (isTransaction && session) {
+        await session.abortTransaction().catch(() => {});
+      }
+      if (session) {
+        session.endSession();
+      }
 
-      // If invoice number duplicated, retry with new number.
       if (isDuplicateInvoiceNumberError(error) && attempt < maxAttempts) {
         continue;
       }
@@ -374,24 +362,25 @@ router.post('/', async (req: Request, res: Response) => {
   res.status(500).json({ error: 'Failed to create invoice after multiple attempts due to duplicate invoice number.' });
 });
 
-
-
 router.put('/:id', async (req: Request, res: Response) => {
-  const session = await Inventory.startSession();
-  session.startTransaction();
+  const { session, isTransaction } = await getOptionalTransactionSession();
 
   try {
-    const existingInvoice = await Invoice.findById(req.params.id).session(session);
+    const existingInvoice = session
+      ? await Invoice.findById(req.params.id).session(session)
+      : await Invoice.findById(req.params.id);
+
     if (!existingInvoice) {
-      await session.abortTransaction();
-      session.endSession();
+      if (isTransaction && session) await session.abortTransaction().catch(() => {});
+      if (session) session.endSession();
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
-    // Restore old inventory (based on old items)
+    // Restore old inventory
     await restoreInventoryFromInvoiceItems(
       existingInvoice.items.map((it: any) => ({
         productId: it.productId,
+        name: it.name,
         grossWeight: it.grossWeight,
         netWeight: it.netWeight,
         stoneWeight: it.stoneWeight,
@@ -401,28 +390,26 @@ router.put('/:id', async (req: Request, res: Response) => {
     );
 
     const updatePayload = { ...req.body };
-    // Use frontend-provided date if available
     if (updatePayload.createdAt) {
       updatePayload.createdAt = new Date(updatePayload.createdAt);
     }
 
-    // Update invoice
-    const updatedInvoice = await Invoice.findByIdAndUpdate(req.params.id, updatePayload, {
-      new: true,
-      runValidators: true,
-      session,
-    });
+    const options: any = { new: true, runValidators: true };
+    if (session) options.session = session;
+
+    const updatedInvoice = await Invoice.findByIdAndUpdate(req.params.id, updatePayload, options);
 
     if (!updatedInvoice) {
-      await session.abortTransaction();
-      session.endSession();
+      if (isTransaction && session) await session.abortTransaction().catch(() => {});
+      if (session) session.endSession();
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
-    // Deduct new inventory (based on updated items)
+    // Deduct new inventory
     await applyInventoryDeductionFromInvoiceItems(
       updatedInvoice.items.map((it: any) => ({
         productId: it.productId,
+        name: it.name,
         grossWeight: it.grossWeight,
         netWeight: it.netWeight,
         stoneWeight: it.stoneWeight,
@@ -431,18 +418,25 @@ router.put('/:id', async (req: Request, res: Response) => {
       session,
     );
 
-    await session.commitTransaction();
-    session.endSession();
+    if (isTransaction && session) {
+      await session.commitTransaction();
+    }
+    if (session) {
+      session.endSession();
+    }
 
     return res.json(updatedInvoice);
   } catch (error: any) {
-    await session.abortTransaction();
-    session.endSession();
+    if (isTransaction && session) {
+      await session.abortTransaction().catch(() => {});
+    }
+    if (session) {
+      session.endSession();
+    }
 
     console.error('[PUT /api/invoices] failed:', error);
     const msg = error?.message || 'Failed to update invoice';
 
-    // Duplicate invoice number on update (unique index)
     if (isDuplicateInvoiceNumberError(error)) {
       return res.status(409).json({ error: 'Invoice number already exists.' });
     }
@@ -468,15 +462,11 @@ const updateInvoiceDateHandler = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
-    // Set the new date on the main document
     existingInvoice.createdAt = parsedDate;
-
-    // Update the date for each payment subdocument
     (existingInvoice.payments || []).forEach((p: any) => {
       p.date = parsedDate;
     });
 
-    // Save the changes to the document and its subdocuments
     const updatedInvoice = await existingInvoice.save({ validateBeforeSave: false });
     
     if (!updatedInvoice) {
@@ -493,47 +483,58 @@ const updateInvoiceDateHandler = async (req: Request, res: Response) => {
 router.put('/:id/date', updateInvoiceDateHandler);
 router.patch('/:id/date', updateInvoiceDateHandler);
 
-
 router.delete('/:id', async (req: Request, res: Response) => {
+  const { session, isTransaction } = await getOptionalTransactionSession();
+
   try {
-    const session = await Inventory.startSession();
-    session.startTransaction();
+    const invoice = session
+      ? await Invoice.findById(req.params.id).session(session)
+      : await Invoice.findById(req.params.id);
 
-    try {
-      const invoice = await Invoice.findById(req.params.id).session(session);
-      if (!invoice) {
-        session.endSession();
-        return res.status(404).json({ error: 'Invoice not found' });
-      }
-
-      // Restore inventory before deleting
-      await restoreInventoryFromInvoiceItems(
-        invoice.items.map((it: any) => ({
-          productId: it.productId,
-          grossWeight: it.grossWeight,
-          netWeight: it.netWeight,
-          stoneWeight: it.stoneWeight,
-          qty: it.qty,
-        })),
-        session,
-      );
-
-      // Delete the invoice
-      await Invoice.findByIdAndDelete(req.params.id).session(session);
-
-      await session.commitTransaction();
-      session.endSession();
-
-      res.json({ message: 'Invoice deleted and inventory restored' });
-    } catch (error: any) {
-      await session.abortTransaction();
-      session.endSession();
-      console.error('[DELETE /api/invoices] failed:', error);
-      res.status(400).json({ error: error?.message || 'Failed to delete invoice' });
+    if (!invoice) {
+      if (isTransaction && session) await session.abortTransaction().catch(() => {});
+      if (session) session.endSession();
+      return res.status(404).json({ error: 'Invoice not found' });
     }
+
+    // Restore inventory before deleting
+    await restoreInventoryFromInvoiceItems(
+      invoice.items.map((it: any) => ({
+        productId: it.productId,
+        name: it.name,
+        grossWeight: it.grossWeight,
+        netWeight: it.netWeight,
+        stoneWeight: it.stoneWeight,
+        qty: it.qty,
+      })),
+      session,
+    );
+
+    // Delete the invoice
+    if (session) {
+      await Invoice.findByIdAndDelete(req.params.id).session(session);
+    } else {
+      await Invoice.findByIdAndDelete(req.params.id);
+    }
+
+    if (isTransaction && session) {
+      await session.commitTransaction();
+    }
+    if (session) {
+      session.endSession();
+    }
+
+    res.json({ message: 'Invoice deleted and inventory restored' });
   } catch (error: any) {
-    console.error('[DELETE /api/invoices] session failed:', error);
-    res.status(500).json({ error: error?.message || 'Failed to delete invoice' });
+    if (isTransaction && session) {
+      await session.abortTransaction().catch(() => {});
+    }
+    if (session) {
+      session.endSession();
+    }
+
+    console.error('[DELETE /api/invoices] failed:', error);
+    res.status(400).json({ error: error?.message || 'Failed to delete invoice' });
   }
 });
 
