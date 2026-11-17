@@ -4,7 +4,7 @@ const router = Router();
 // Get all purchases
 router.get('/', async (_req, res) => {
     try {
-        const purchases = await Purchases.find().sort({ createdAt: -1 });
+        const purchases = await Purchases.find().sort({ createdAt: -1 }).lean();
         res.json(purchases);
     }
     catch (error) {

@@ -4,7 +4,7 @@ const router = Router();
 // Get all orders
 router.get('/', async (_req, res) => {
     try {
-        const orders = await Order.find().sort({ createdAt: -1 });
+        const orders = await Order.find().sort({ createdAt: -1 }).lean();
         res.json(orders);
     }
     catch (error) {

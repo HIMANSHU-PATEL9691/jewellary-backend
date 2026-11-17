@@ -6,7 +6,7 @@ const router = Router();
 // Get all orders
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
+    const orders = await Order.find().sort({ createdAt: -1 }).lean();
     res.json(orders);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch orders' });

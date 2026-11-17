@@ -158,7 +158,7 @@ async function applyInventoryDeductionFromInvoiceItems(invoiceItems, session = n
 }
 router.get('/', async (_req, res) => {
     try {
-        const invoices = await Invoice.find().sort({ createdAt: -1 });
+        const invoices = await Invoice.find().sort({ createdAt: -1 }).lean();
         res.json(invoices);
     }
     catch (error) {
@@ -225,12 +225,41 @@ async function getOptionalTransactionSession() {
     }
     return { session, isTransaction };
 }
+function normalizeInvoicePaymentMode(mode) {
+    if (!mode || typeof mode !== 'string')
+        return 'Cash';
+    const trimmed = mode.trim();
+    const lower = trimmed.toLowerCase();
+    if (lower === 'cash')
+        return 'Cash';
+    if (lower === 'upi' || lower === 'gpay' || lower === 'phonepe' || lower === 'paytm' || lower === 'qr')
+        return 'UPI';
+    if (lower === 'card' || lower === 'debit card' || lower === 'credit card')
+        return 'Card';
+    if (lower === 'bank' || lower === 'neft' || lower === 'rtgs' || lower === 'imps' || lower === 'cheque')
+        return 'Bank';
+    if (lower === 'emi' || lower.includes('finance') || lower.includes('loan'))
+        return 'EMI';
+    if (lower === 'split')
+        return 'Split';
+    if (lower === 'advance' || lower.includes('advance'))
+        return 'Advance';
+    return trimmed;
+}
 router.post('/', async (req, res) => {
     const maxAttempts = 10;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const { session, isTransaction } = await getOptionalTransactionSession();
         try {
             const invoicePayload = { ...req.body };
+            // Normalize payment mode and payment line items
+            invoicePayload.paymentMode = normalizeInvoicePaymentMode(invoicePayload.paymentMode);
+            if (Array.isArray(invoicePayload.payments)) {
+                invoicePayload.payments = invoicePayload.payments.map((p) => ({
+                    ...p,
+                    mode: normalizeInvoicePaymentMode(p.mode),
+                }));
+            }
             // On retries, regenerate number (only if duplicate-prone)
             if (attempt > 1) {
                 invoicePayload.number = generateNewInvoiceNumber(req.body?.number);
@@ -323,6 +352,15 @@ router.put('/:id', async (req, res) => {
             qty: it.qty,
         })), session);
         const updatePayload = { ...req.body };
+        if (updatePayload.paymentMode) {
+            updatePayload.paymentMode = normalizeInvoicePaymentMode(updatePayload.paymentMode);
+        }
+        if (Array.isArray(updatePayload.payments)) {
+            updatePayload.payments = updatePayload.payments.map((p) => ({
+                ...p,
+                mode: normalizeInvoicePaymentMode(p.mode),
+            }));
+        }
         if (updatePayload.createdAt) {
             updatePayload.createdAt = new Date(updatePayload.createdAt);
         }

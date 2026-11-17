@@ -15,7 +15,7 @@ const cleanCustomer = (doc) => {
 // Get all customers
 router.get('/', async (_req, res) => {
     try {
-        const customers = await Customer.find().sort({ createdAt: -1 });
+        const customers = await Customer.find().sort({ createdAt: -1 }).lean();
         res.json(customers.map(cleanCustomer));
     }
     catch (error) {

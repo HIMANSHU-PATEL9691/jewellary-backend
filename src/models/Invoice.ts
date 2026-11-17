@@ -15,6 +15,18 @@ interface IInvoiceItem {
   qty: number;
 }
 
+export const INVOICE_PAYMENT_MODES = [
+  'Cash',
+  'UPI',
+  'Card',
+  'Bank',
+  'EMI',
+  'Split',
+  'Advance',
+] as const;
+
+export type InvoicePaymentMode = (typeof INVOICE_PAYMENT_MODES)[number];
+
 interface IInvoicePayment {
   date: Date;
   amount: number;
@@ -31,7 +43,7 @@ interface IInvoice {
   items: IInvoiceItem[];
   discount: number;
   oldGoldAmount: number;
-  paymentMode: 'Cash' | 'UPI' | 'Card' | 'EMI';
+  paymentMode: InvoicePaymentMode;
   subtotal: number;
   gstAmount: number;
   total: number;
@@ -78,7 +90,7 @@ const invoiceSchema = new Schema<IInvoice>(
     items: { type: [invoiceItemSchema], required: true },
     discount: { type: Number, required: true, default: 0 },
     oldGoldAmount: { type: Number, required: true, default: 0 },
-    paymentMode: { type: String, enum: ['Cash', 'UPI', 'Card', 'EMI'], required: true },
+    paymentMode: { type: String, enum: INVOICE_PAYMENT_MODES, required: true },
     subtotal: { type: Number, required: true },
     gstAmount: { type: Number, required: true },
     total: { type: Number, required: true },

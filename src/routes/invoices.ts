@@ -196,7 +196,7 @@ async function applyInventoryDeductionFromInvoiceItems(
 router.get('/', async (_req: Request, res: Response) => {
 
   try {
-    const invoices = await Invoice.find().sort({ createdAt: -1 });
+    const invoices = await Invoice.find().sort({ createdAt: -1 }).lean();
     res.json(invoices);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch invoices' });
@@ -265,6 +265,20 @@ async function getOptionalTransactionSession() {
   return { session, isTransaction };
 }
 
+function normalizeInvoicePaymentMode(mode: any): string {
+  if (!mode || typeof mode !== 'string') return 'Cash';
+  const trimmed = mode.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'cash') return 'Cash';
+  if (lower === 'upi' || lower === 'gpay' || lower === 'phonepe' || lower === 'paytm' || lower === 'qr') return 'UPI';
+  if (lower === 'card' || lower === 'debit card' || lower === 'credit card') return 'Card';
+  if (lower === 'bank' || lower === 'neft' || lower === 'rtgs' || lower === 'imps' || lower === 'cheque') return 'Bank';
+  if (lower === 'emi' || lower.includes('finance') || lower.includes('loan')) return 'EMI';
+  if (lower === 'split') return 'Split';
+  if (lower === 'advance' || lower.includes('advance')) return 'Advance';
+  return trimmed;
+}
+
 router.post('/', async (req: Request, res: Response) => {
   const maxAttempts = 10;
 
@@ -273,6 +287,15 @@ router.post('/', async (req: Request, res: Response) => {
 
     try {
       const invoicePayload = { ...req.body };
+
+      // Normalize payment mode and payment line items
+      invoicePayload.paymentMode = normalizeInvoicePaymentMode(invoicePayload.paymentMode);
+      if (Array.isArray(invoicePayload.payments)) {
+        invoicePayload.payments = invoicePayload.payments.map((p: any) => ({
+          ...p,
+          mode: normalizeInvoicePaymentMode(p.mode),
+        }));
+      }
 
       // On retries, regenerate number (only if duplicate-prone)
       if (attempt > 1) {
@@ -390,6 +413,15 @@ router.put('/:id', async (req: Request, res: Response) => {
     );
 
     const updatePayload = { ...req.body };
+    if (updatePayload.paymentMode) {
+      updatePayload.paymentMode = normalizeInvoicePaymentMode(updatePayload.paymentMode);
+    }
+    if (Array.isArray(updatePayload.payments)) {
+      updatePayload.payments = updatePayload.payments.map((p: any) => ({
+        ...p,
+        mode: normalizeInvoicePaymentMode(p.mode),
+      }));
+    }
     if (updatePayload.createdAt) {
       updatePayload.createdAt = new Date(updatePayload.createdAt);
     }

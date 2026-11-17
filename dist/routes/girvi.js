@@ -3,7 +3,7 @@ import { Girvi } from '../models/Girvi';
 const router = Router();
 router.get('/', async (_req, res) => {
     try {
-        const data = await Girvi.find().sort({ createdAt: -1 });
+        const data = await Girvi.find().sort({ createdAt: -1 }).lean();
         res.json(data);
     }
     catch (error) {

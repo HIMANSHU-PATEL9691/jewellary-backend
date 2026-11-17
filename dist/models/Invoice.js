@@ -1,4 +1,13 @@
 import { Schema, model } from 'mongoose';
+export const INVOICE_PAYMENT_MODES = [
+    'Cash',
+    'UPI',
+    'Card',
+    'Bank',
+    'EMI',
+    'Split',
+    'Advance',
+];
 const invoiceItemSchema = new Schema({
     productId: { type: String, required: true },
     name: { type: String, required: true },
@@ -28,7 +37,7 @@ const invoiceSchema = new Schema({
     items: { type: [invoiceItemSchema], required: true },
     discount: { type: Number, required: true, default: 0 },
     oldGoldAmount: { type: Number, required: true, default: 0 },
-    paymentMode: { type: String, enum: ['Cash', 'UPI', 'Card', 'EMI'], required: true },
+    paymentMode: { type: String, enum: INVOICE_PAYMENT_MODES, required: true },
     subtotal: { type: Number, required: true },
     gstAmount: { type: Number, required: true },
     total: { type: Number, required: true },

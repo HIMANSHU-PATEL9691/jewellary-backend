@@ -6,7 +6,7 @@ const router = Router();
 // Get all repairs
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const repairs = await Repair.find().sort({ createdAt: -1 });
+    const repairs = await Repair.find().sort({ createdAt: -1 }).lean();
     res.json(repairs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch repairs' });

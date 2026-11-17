@@ -4,7 +4,7 @@ const router = Router();
 // Get all advances
 router.get('/', async (_req, res) => {
     try {
-        const advances = await Advance.find().sort({ createdAt: -1 });
+        const advances = await Advance.find().sort({ createdAt: -1 }).lean();
         res.json(advances);
     }
     catch (error) {

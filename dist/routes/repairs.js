@@ -4,7 +4,7 @@ const router = Router();
 // Get all repairs
 router.get('/', async (_req, res) => {
     try {
-        const repairs = await Repair.find().sort({ createdAt: -1 });
+        const repairs = await Repair.find().sort({ createdAt: -1 }).lean();
         res.json(repairs);
     }
     catch (error) {

@@ -4,7 +4,7 @@ const router = Router();
 // Get all expenses
 router.get('/', async (_req, res) => {
     try {
-        const expenses = await Expenses.find().sort({ createdAt: -1 });
+        const expenses = await Expenses.find().sort({ createdAt: -1 }).lean();
         res.json(expenses);
     }
     catch (error) {

@@ -6,7 +6,7 @@ const router = Router();
 // Get all advances
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const advances = await Advance.find().sort({ createdAt: -1 });
+    const advances = await Advance.find().sort({ createdAt: -1 }).lean();
     res.json(advances);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch advances' });

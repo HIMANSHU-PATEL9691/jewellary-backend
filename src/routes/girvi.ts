@@ -5,7 +5,7 @@ const router = Router();
 
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const data = await Girvi.find().sort({ createdAt: -1 });
+    const data = await Girvi.find().sort({ createdAt: -1 }).lean();
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch girvi records' });

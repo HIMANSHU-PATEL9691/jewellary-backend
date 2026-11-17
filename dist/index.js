@@ -18,6 +18,9 @@ import girviRouter from './routes/girvi';
 import ordersRouter from './routes/orders';
 import employeesRouter from './routes/employees';
 import schemesRouter from './routes/schemes';
+import transactionsRouter from './routes/transactions';
+import bankAccountsRouter from './routes/bank-accounts';
+import ledgerSettingsRouter from './routes/ledger-settings';
 const app = express();
 // Middleware
 app.use(express.json({ limit: '50mb' }));
@@ -53,6 +56,9 @@ app.use('/api/girvi', girviRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/employees', employeesRouter);
 app.use('/api/schemes', schemesRouter);
+app.use('/api/transactions', transactionsRouter);
+app.use('/api/bank-accounts', bankAccountsRouter);
+app.use('/api/ledger-settings', ledgerSettingsRouter);
 // Error handling
 app.use(errorHandler);
 const PORT = process.env.PORT || 3000;
