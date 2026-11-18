@@ -312,7 +312,10 @@ router.post('/', async (req: Request, res: Response) => {
         const netWeight = Number(it?.netWeight ?? 0);
         const ratePerGram = Number(it?.ratePerGram ?? 0);
         const makingCharge = Number(it?.makingCharge ?? 0);
-        const lineBase = netWeight * ratePerGram + makingCharge;
+        let lineBase = netWeight * ratePerGram + makingCharge;
+        if (lineBase === 0 && (Number(it?.total) > 0 || Number(it?.rate) > 0 || Number(it?.amount) > 0)) {
+          lineBase = Number(it?.total || it?.rate || it?.amount || 0);
+        }
         
         const gstPct = Number(it?.gstPct ?? 0);
         itemSubtotal += lineBase;
@@ -320,6 +323,14 @@ router.post('/', async (req: Request, res: Response) => {
           gstAmount += lineBase * (gstPct / 100);
         }
       });
+
+      // Preserve subtotal and item rate for manual dues / fixed-amount invoices with 0 weight
+      if (itemSubtotal === 0 && (Number(invoicePayload.subtotal) > 0 || Number(invoicePayload.total) > 0)) {
+        itemSubtotal = Number(invoicePayload.subtotal || invoicePayload.total || 0);
+        if (items.length === 1 && !items[0].ratePerGram && !items[0].makingCharge) {
+          items[0].ratePerGram = itemSubtotal;
+        }
+      }
 
       invoicePayload.items = items;
       invoicePayload.subtotal = itemSubtotal;
